@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Brain Lab</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,Segoe UI,sans-serif;background:linear-gradient(135deg,#6c5ce7,#00cec9);min-height:100vh;color:#fff}
+.app{max-width:760px;margin:auto;padding:18px}.card{background:rgba(255,255,255,.14);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.22);border-radius:24px;padding:20px;box-shadow:0 12px 35px rgba(0,0,0,.18)}
+h1{font-size:38px;margin:5px 0 4px}.sub{opacity:.9;margin-bottom:18px}.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}.test{border:0;border-radius:18px;padding:18px 12px;color:#fff;font-weight:800;font-size:15px;min-height:90px;cursor:pointer;background:linear-gradient(135deg,#ff7675,#fdcb6e);box-shadow:0 7px 0 rgba(0,0,0,.12);transition:.15s}.test:nth-child(2n){background:linear-gradient(135deg,#00b894,#00cec9)}.test:nth-child(3n){background:linear-gradient(135deg,#0984e3,#6c5ce7)}.test:nth-child(4n){background:linear-gradient(135deg,#e84393,#a29bfe)}.test:active{transform:translateY(5px);box-shadow:0 2px 0 rgba(0,0,0,.12)}
+.top{display:flex;justify-content:space-between;align-items:center;gap:10px}.back{border:0;background:rgba(255,255,255,.2);color:#fff;border-radius:12px;padding:10px 14px;font-weight:700;cursor:pointer}
+.bar{height:10px;background:rgba(255,255,255,.22);border-radius:99px;overflow:hidden;margin:14px 0}
+.timer{font-size:24px;font-weight:900;text-align:center;margin:8px 0}.fill{height:100%;background:#fff;width:0%;transition:.25s}
+.question{font-size:27px;font-weight:900;text-align:center;margin:25px 5px;line-height:1.25}.choices{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}.choice{border:0;border-radius:16px;padding:16px;background:#fff;color:#333;font-size:18px;font-weight:800;cursor:pointer;min-height:58px}.choice:active{transform:scale(.98)}.visual{font-size:48px;text-align:center;margin:15px}.score{text-align:center;font-size:30px;font-weight:900}.small{text-align:center;opacity:.85}.hide{display:none}
+@media(max-width:500px){.grid{grid-template-columns:1fr 1fr}.question{font-size:23px}.choice{font-size:16px}}
+</style>
+
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#6c5ce7">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Brain Lab">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+</head>
+<body>
+<div class="app">
+<div id="menu" class="card">
+<h1>🧠 Brain Lab</h1>
+<div class="sub">14 puzzle labs • 60 questions in every lab • 840+ questions total</div>
+<div class="grid" id="tests"></div>
+</div>
+
+<div id="game" class="card hide">
+<div class="top"><button class="back" onclick="showMenu()">← Menu</button><b id="title"></b><b id="counter"></b></div>
+<div class="bar"><div class="fill" id="fill"></div></div>
+<div class="timer" id="timer">⏱️ 25</div>
+<div id="question"></div>
+<div class="choices" id="choices"></div>
+</div>
+
+<div id="result" class="card hide">
+<h1>🎉 Finished!</h1><div class="score" id="finalScore"></div>
+<p class="small" id="resultText"></p>
+<button class="test" onclick="restart()">🔁 Play Again</button>
+<button class="test" onclick="showMenu()" style="margin-top:10px">🏠 Back to Menu</button>
+</div>
+</div>
+
+<script>
+const N=60;
+const tests=[
+["🔢 Number Patterns","Number"],["🔷 Shape Patterns","Shape"],["🕵️ Odd One Out","Odd"],["🧠 Memory Test","Memory"],
+["⚡ Reaction Test","Reaction"],["🔤 Letter Patterns","Letter"],["🔄 Rotation","Rotation"],["➗ Logic Math","Math"],
+["💡 Deduction","Deduction"],["🟦 Matrix Puzzle","Matrix"],["🔎 Visual Search","Visual"],["📐 Spatial Reasoning","Spatial"],
+["🧩 Sequence Memory","Sequence"],["🎯 Mixed Challenge","Mixed"]
+];
+let type="", questions=[], index=0, score=0, timeLeft=25, timer=null, locked=false;
+
+function rnd(a,b){return Math.floor(Math.random()*(b-a+1))+a}
+function shuffle(a){return [...a].sort(()=>Math.random()-.5)}
+function choices(correct, pool=[]){
+ let set=[String(correct),...pool.map(String)];
+ let tries=0;
+ while(set.length<4 && tries++<100){let x=String(rnd(Math.max(0,Number(correct)-15),Number(correct)+15));if(!set.includes(x))set.push(x)}
+ return shuffle(set.slice(0,4));
+}
+function q(text,ans,opts){return {text,answer:String(ans),options:opts?shuffle(opts.map(String)):choices(ans)}}
+
+// 60 number-pattern questions: several sequence families.
+function numberQs(){
+ let out=[];
+ for(let i=0;i<N;i++){
+   let a=rnd(2,30), d=rnd(2,12), n=[a,a+d,a+2*d,a+3*d]; out.push(q(`What comes next? ${n.join(", ")}, ?`,a+4*d));
+ }
+ for(let i=0;i<N;i++){} // pool replaced below to maintain exactly 60
+ // Replace last 40 with other families
+ for(let i=20;i<N;i++){
+   let a=rnd(2,9), r=rnd(2,4), n=[a,a*r,a*r*r,a*r*r*r]; out[i]=q(`What comes next? ${n.join(", ")}, ?`,a*r**4);
+ }
+ return shuffle(out);
+}
+function shapeQs(){
+ const shapes=["🔺","🔵","🟩","⭐","⬟","❤️","⬛","🔶"];
+ let out=[];
+ for(let i=0;i<N;i++){
+   let s=shapes[i%shapes.length], seq=[s,shapes[(i+1)%8],s,shapes[(i+1)%8]];
+   out.push(q(`Which shape comes next?<div class="visual">${seq.join(" ")}</div>`,s,shapes.slice(0,4)));
+ }
+ return shuffle(out);
+}
+function oddQs(){
+ let out=[];
+ const groups=[
+  ["2","4","6","9"],["3","6","9","10"],["12","15","18","20"],["5","10","15","22"],
+  ["8","16","24","31"],["7","14","21","29"],["11","22","33","40"],["4","8","12","17"]
+ ];
+ for(let i=0;i<N;i++){
+  let g=groups[i%groups.length], odd=g[g.length-1];
+  let arr=shuffle(g); out.push(q(`Which number does NOT follow the pattern? ${arr.join("   ")}`,odd,arr));
+ }
+ return shuffle(out);
+}
+function memoryQs(){
+ let out=[];
+ const icons=["🍎","🚀","🌟","🐸","🎈","🍕","⚽","🦊","🌈","🎸","🐼","🍩"];
+ for(let i=0;i<N;i++){
+   let len=4+(i%3), seq=[]; for(let j=0;j<len;j++)seq.push(icons[(i*3+j*2)%icons.length]);
+   let correct=seq[seq.length-1], opts=[...new Set([correct,...icons])].slice(0,4);
+   out.push(q(`Remember this sequence:<div class="visual">${seq.join(" ")}</div>Which symbol was last?`,correct,opts));
+ }
+ return shuffle(out);
+}
+function reactionQs(){
+ let out=[];
+ for(let i=0;i<N;i++){
+   let target=["RED","BLUE","GREEN","YELLOW"][i%4];
+   let words=["RED","BLUE","GREEN","YELLOW"]; let shown=shuffle(words);
+   out.push(q(`Tap the matching word: <div class="visual">${target}</div>Which option matches exactly?`,target,shown));
+ }
+ return shuffle(out);
+}
+function letterQs(){
+ let out=[];
+ for(let i=0;i<30;i++){
+   let start=rnd(1,20), step=rnd(1,5), letters=[];
+   for(let j=0;j<4;j++)letters.push(String.fromCharCode(64+start+j*step));
+   let ans=String.fromCharCode(64+start+4*step); out.push(q(`What letter comes next? ${letters.join(", ")}, ?`,ans));
+ }
+ for(let i=30;i<60;i++){
+   let start=rnd(1,15), step=rnd(1,4), letters=[];
+   for(let j=0;j<4;j++)letters.push(String.fromCharCode(64+start+j*step));
+   let ans=String.fromCharCode(64+start+4*step); out.push(q(`Continue the alphabet pattern: ${letters.join(" → ")} → ?`,ans));
+ }
+ return shuffle(out);
+}
+function rotationQs(){
+ let symbols=["⬆️","➡️","⬇️","⬅️"];
+ let out=[];
+ for(let i=0;i<N;i++){
+   let start=i%4, turns=1+(i%3), ans=symbols[(start+turns)%4];
+   let opts=symbols; out.push(q(`Rotate this arrow ${turns} quarter-turn${turns>1?"s":""}: <div class="visual">${symbols[start]}</div>`,ans,opts));
+ }
+ return shuffle(out);
+}
+function mathQs(){
+ let out=[];
+ for(let i=0;i<30;i++){let a=rnd(8,40),b=rnd(3,20),c=rnd(2,9),ans=(a+b)*c;out.push(q(`Solve: (${a} + ${b}) × ${c} = ?`,ans))}
+ for(let i=30;i<60;i++){let a=rnd(10,60),b=rnd(2,9),ans=a+b*b;out.push(q(`Solve: ${a} + ${b}² = ?`,ans))}
+ return shuffle(out);
+}
+function deductionQs(){
+ let out=[];
+ const sets=[
+  ["Ava","Ben","Cara","Dio"],["Liam","Mia","Noah","Zoe"],["Kai","Nia","Owen","Ruby"],
+  ["Sam","Tia","Uma","Will"],["Jay","Ivy","Leo","Nora"]
+ ];
+ for(let i=0;i<N;i++){
+   let names=sets[i%sets.length], ordered=[...names].sort();
+   let shortest=ordered[0];
+   out.push(q(`Four students stand in alphabetical order. Who is first? ${ordered.join(", ")}`,shortest,names));
+ }
+ return shuffle(out);
+}
+function matrixQs(){
+ let out=[];
+ for(let i=0;i<N;i++){
+   let a=rnd(1,9),b=rnd(1,9),c=a+b,d=rnd(1,9),e=rnd(1,9),f=d+e;
+   out.push(q(`Complete the pattern:<br><div class="visual">${a} + ${b} = ${c}<br>${d} + ${e} = ?</div>`,f));
+ }
+ return shuffle(out);
+}
+function visualQs(){
+ let out=[], nums=["1","2","3","4","5","6","7","8","9"];
+ for(let i=0;i<N;i++){
+   let target=nums[i%9], others=shuffle(nums.filter(x=>x!==target)).slice(0,3);
+   let arr=shuffle([target,target,target,...others]);
+   out.push(q(`Find the number that appears most often:<div class="visual">${arr.join(" ")}</div>`,target,nums.slice(0,4)));
+ }
+ return shuffle(out);
+}
+function spatialQs(){
+ let out=[];
+ const dirs=[["north","south"],["east","west"],["left","right"],["up","down"]];
+ for(let i=0;i<N;i++){
+   let d=dirs[i%4]; out.push(q(`If you face ${d[0].toUpperCase()}, which direction is directly behind you?`,d[1],shuffle(["north","south","east","west"])));
+ }
+ return shuffle(out);
+}
+function sequenceQs(){
+ let out=[], icons=["🔴","🟢","🔵","🟡","🟣","🟠"];
+ for(let i=0;i<N;i++){
+   let len=4+(i%3), step=1+(i%5), seq=[];
+   for(let j=0;j<len;j++)seq.push(icons[(i+j*step)%icons.length]);
+   let ans=icons[(i+len*step)%icons.length];
+   out.push(q(`Continue the sequence:<div class="visual">${seq.join(" ")}</div>`,ans,icons.slice(0,4)));
+ }
+ return shuffle(out);
+}
+function mixedQs(){
+ let pools=[numberQs,shapeQs,letterQs,mathQs,rotationQs,spatialQs];
+ let out=[];
+ for(let i=0;i<N;i++) out.push(pools[i%pools.length]()[i%60]);
+ return shuffle(out);
+}
+const generators={Number:numberQs,Shape:shapeQs,Odd:oddQs,Memory:memoryQs,Reaction:reactionQs,Letter:letterQs,Rotation:rotationQs,Math:mathQs,Deduction:deductionQs,Matrix:matrixQs,Visual:visualQs,Spatial:spatialQs,Sequence:sequenceQs,Mixed:mixedQs};
+
+function renderMenu(){
+ document.getElementById("tests").innerHTML=tests.map((t,i)=>`<button class="test" onclick="start('${t[1]}','${t[0]}')">${t[0]}<br><small>60 questions</small></button>`).join("");
+}
+function start(t,name){
+ clearInterval(timer);
+ type=t; questions=generators[t](); index=0; score=0; locked=false;
+ document.getElementById("menu").classList.add("hide");document.getElementById("result").classList.add("hide");document.getElementById("game").classList.remove("hide");
+ document.getElementById("title").textContent=name; showQuestion();
+}
+function showQuestion(){
+ clearInterval(timer);
+ locked=false; timeLeft=25;
+ let x=questions[index]; document.getElementById("counter").textContent=`${index+1}/60`;
+ document.getElementById("fill").style.width=((index)/60*100)+"%";
+ document.getElementById("question").innerHTML=x.text;
+ document.getElementById("choices").innerHTML=x.options.map(o=>`<button class="choice" onclick="answer(this)">${o}</button>`).join("");
+ updateTimer();
+ timer=setInterval(()=>{
+   timeLeft--;
+   updateTimer();
+   if(timeLeft<=0){ clearInterval(timer); timeoutQuestion(); }
+ },1000);
+}
+function answer(btn){
+ if(locked)return;
+ locked=true; clearInterval(timer);
+ let x=questions[index]; if(btn.dataset.done)return; btn.dataset.done="1";
+ if(btn.textContent===x.answer){score++;btn.style.outline="4px solid #00b894"}else{btn.style.outline="4px solid #ff7675"}
+ setTimeout(()=>{index++; if(index>=60)finish(); else showQuestion()},220);
+}
+function timeoutQuestion(){
+ if(locked)return;
+ locked=true;
+ document.getElementById("timer").textContent="⏰ Time!";
+ setTimeout(()=>{index++; if(index>=60)finish(); else showQuestion()},500);
+}
+function updateTimer(){
+ const el=document.getElementById("timer");
+ el.textContent=`⏱️ ${timeLeft}s`;
+}
+function finish(){
+ clearInterval(timer);
+ document.getElementById("game").classList.add("hide");document.getElementById("result").classList.remove("hide");
+ document.getElementById("finalScore").textContent=`${score} / 60`;
+ document.getElementById("resultText").textContent=score>=50?"Amazing run! 🧠🔥":score>=40?"Great job! Keep challenging yourself! 💪":score>=30?"Nice work! Try again and beat your score! 🚀":"Good attempt! Practice makes progress! 🌟";
+}
+function restart(){start(type,tests.find(x=>x[1]===type)[0])}
+function showMenu(){clearInterval(timer);document.getElementById("game").classList.add("hide");document.getElementById("result").classList.add("hide");document.getElementById("menu").classList.remove("hide")}
+renderMenu();
+</script>
+
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js"));
+}
+</script>
+</body>
+</html>
